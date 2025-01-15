@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+dist
+.git
+.gitignore
+README.md
+!src/**/*.js
+!src/**/*.jsx
+!public/**/*
+!webpack.config.js
+!.babelrc
