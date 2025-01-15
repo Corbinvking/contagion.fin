@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-text antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Handle mobile landscape */
+  @media screen and (max-height: 500px) and (orientation: landscape) {
+    body {
+      @apply overflow-auto;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-card border border-border rounded-xl p-4;
+  }
+  
+  .positive-value {
+    @apply text-primary;
+  }
+  
+  .negative-value {
+    @apply text-danger;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

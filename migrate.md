@@ -1,5 +1,8 @@
 # Migration Guide for SpreadGL Project
 
+make sure your in the right directory : cd contagion-backend
+
+
 ## Essential Files for Migration
 
 ### 1. Core Server Components
