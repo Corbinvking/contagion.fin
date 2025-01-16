@@ -63,16 +63,17 @@ color: [139, 0, 0]
 ##### Market Data Integration (`src/market-data/real/`)
 Real-time cryptocurrency market data integration:
 
-###### BitqueryService (`BitqueryService.js`)
-Handles GraphQL queries to Bitquery API:
+###### SolanaTrackerService (`soltracker.js`)
+Handles REST API calls to SolanaTracker API:
 ```javascript
-class BitqueryService {
-    constructor() {
-        this.endpoint = 'https://graphql.bitquery.io';
-        this.cacheTimeout = 5000; // 5 seconds cache
+class SolanaTrackerService {
+    constructor(apiKey) {
+        this.baseUrl = 'https://data.solanatracker.io';
+        this.cacheTimeout = 300000; // 5 minutes cache
     }
-    async fetchTokenData(mintAddress) {
-        // Fetches token transfers, price, and metrics
+    async processTokenData(tokenAddress) {
+        // Fetches token data, price, market cap, and metrics
+        // Returns: { price, marketCap, volume, volatility, transactions }
     }
 }
 ```
@@ -83,37 +84,46 @@ Manages continuous market data updates:
 class MarketDataStream extends EventEmitter {
     constructor(options = {}) {
         this.interval = options.interval || 60000; // Default 1 minute
-        this.windowSize = options.windowSize || 5;  // Rolling window size
+        this.windowSize = options.windowSize || 5; // Keep last 5 data points
     }
-    // Emits: 'data', 'error', 'stream:start', 'stream:stop'
+    // Emits 'data' events with market metrics and trends
 }
 ```
 
 ###### Market To Virus Translator (`MarketToVirusTranslator.js`)
-Converts market metrics to virus parameters:
+Translates market data into virus behavior:
 ```javascript
 class MarketToVirusTranslator {
-    translate(marketData, trends) {
-        return {
-            spreadRadius,      // Based on volume changes
-            growthMultiplier, // Based on volatility
-            intensity,        // Based on transaction count
-            shouldSpawnNew    // Based on significant changes
-        };
+    translateMarketData(marketData) {
+        // Returns virus parameters based on market conditions:
+        // - spreadRadius: Based on trading volume
+        // - growthMultiplier: Based on volatility
+        // - shouldSpawnNew: Based on price/volume/volatility thresholds
+        // - pattern: NORMAL, BURST, or VECTOR based on market events
     }
 }
 ```
 
-Market Data Flow:
+## Communication Flow
+
+### Market Data Integration Flow
 ```
-BitqueryService → MarketDataStream → MarketToVirusTranslator → VirusSystem
+A[SolanaTracker API] -->|REST| B[SolanaTrackerService]
+B -->|Cached Data| C[MarketDataStream]
+C -->|Events| D[MarketToVirusTranslator]
+D -->|Virus Parameters| E[VirusSystem]
 ```
 
-Market to Virus Mappings:
-- Volume Changes → Spread Radius (10-200 units)
-- Volatility → Growth Multiplier (0.5-3.0x)
-- Transaction Count → Intensity (0.1-1.0)
-- Significant Changes → New Spawn Points
+Key Events:
+- SolanaTrackerService: Token data and metrics (5m cache)
+- MarketDataStream: Real-time updates (10-60s intervals)
+- MarketToVirusTranslator: Parameter conversion
+- VirusSystem: Behavior updates
+
+Market Triggers:
+- Price Surge: Spawns BURST pattern spores
+- High Volume: Spawns VECTOR pattern spores
+- High Volatility: Spawns BURST pattern spores
 
 #### 2. Controllers
 
@@ -194,14 +204,14 @@ timestamp?: number;
 
 ### Market Data Integration Flow
 ```
-A[Bitquery API] -->|GraphQL| B[BitqueryService]
+A[SolanaTracker API] -->|REST| B[SolanaTrackerService]
 B -->|Cached Data| C[MarketDataStream]
 C -->|Events| D[MarketToVirusTranslator]
 D -->|Virus Parameters| E[VirusSystem]
 ```
 
 Key Events:
-- BitqueryService: Token transfers and metrics (5s cache)
+- SolanaTrackerService: Token data and metrics (5m cache)
 - MarketDataStream: Real-time updates (10-60s intervals)
 - MarketToVirusTranslator: Parameter conversion
 - VirusSystem: Behavior updates

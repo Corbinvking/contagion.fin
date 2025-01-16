@@ -1,117 +1,74 @@
 export class MarketToVirusTranslator {
-    constructor(options = {}) {
-        // Base parameters for virus behavior
+    constructor() {
         this.params = {
-            // Spread radius parameters
-            baseRadius: options.baseRadius || 50,
-            minRadius: options.minRadius || 10,
-            maxRadius: options.maxRadius || 200,
-            
-            // Growth multiplier parameters
-            baseGrowthMultiplier: options.baseGrowthMultiplier || 1.0,
-            minGrowthMultiplier: options.minGrowthMultiplier || 0.5,
-            maxGrowthMultiplier: options.maxGrowthMultiplier || 2.0,
-            
-            // Intensity parameters
-            baseIntensity: options.baseIntensity || 0.5,
-            minIntensity: options.minIntensity || 0.1,
-            maxIntensity: options.maxIntensity || 1.0,
-            
-            // Thresholds for spawning new points
-            volumeChangeThreshold: options.volumeChangeThreshold || 10, // 10% change
-            volatilityThreshold: options.volatilityThreshold || 15,    // 15% change
-            
-            // Debug mode
-            debug: options.debug || false
+            baseRadius: 0.5,
+            minMultiplier: 0.1,
+            maxMultiplier: 5.0,
+            volatilityThreshold: 10.0,
+            volumeThreshold: 1000000, // $1M threshold
+            priceChangeThreshold: 5.0 // 5% threshold
         };
     }
 
-    translate(marketData, trends) {
-        if (!marketData || !trends) {
-            return null;
-        }
+    translateMarketData(marketData) {
+        const { current, trends } = marketData;
+        const metrics = current.marketMetrics;
 
+        // Initialize virus parameters
         const virusParams = {
-            // Base spread radius affected by volume changes
-            spreadRadius: this.calculateSpreadRadius(trends.volumeChange),
-            
-            // Growth multiplier affected by volatility
-            growthMultiplier: this.calculateGrowthMultiplier(marketData.volatility, trends.volatilityChange),
-            
-            // Intensity affected by transaction count
-            intensity: this.calculateIntensity(trends.transactionCountChange),
-            
-            // Should spawn new points based on significant changes
-            shouldSpawnNew: this.shouldSpawnNewPoints(trends),
-            
-            // Timestamp for tracking
-            timestamp: marketData.fetchTimestamp
+            spreadRadius: this.params.baseRadius,
+            growthMultiplier: 1.0,
+            shouldSpawnNew: false,
+            spawnReason: null,
+            pattern: 'NORMAL'
         };
 
-        if (this.params.debug) {
-            console.log('Market to Virus Translation:', {
-                marketData: {
-                    volatility: marketData.volatility,
-                    totalVolume: marketData.totalVolume,
-                    transactionCount: marketData.transactionCount
-                },
-                trends,
-                virusParams
-            });
+        // Adjust spread radius based on volume
+        const volumeInMillions = parseFloat(metrics.volume) / 1000000;
+        virusParams.spreadRadius = Math.max(
+            this.params.baseRadius * (1 + (volumeInMillions / 10)),
+            this.params.minMultiplier
+        );
+
+        // Adjust growth multiplier based on volatility
+        const volatility = parseFloat(metrics.volatility);
+        virusParams.growthMultiplier = Math.min(
+            1 + (volatility / 100),
+            this.params.maxMultiplier
+        );
+
+        // Check conditions for spawning new spores
+        if (trends) {
+            const priceChange = parseFloat(trends.priceChange);
+            const volumeChange = parseFloat(trends.volumeChange);
+
+            // Spawn on significant price increase
+            if (priceChange > this.params.priceChangeThreshold) {
+                virusParams.shouldSpawnNew = true;
+                virusParams.spawnReason = 'PRICE_SURGE';
+                virusParams.pattern = 'BURST';
+            }
+            // Spawn on high volume
+            else if (volumeChange > this.params.volumeThreshold) {
+                virusParams.shouldSpawnNew = true;
+                virusParams.spawnReason = 'HIGH_VOLUME';
+                virusParams.pattern = 'VECTOR';
+            }
+            // Spawn on high volatility
+            else if (volatility > this.params.volatilityThreshold) {
+                virusParams.shouldSpawnNew = true;
+                virusParams.spawnReason = 'HIGH_VOLATILITY';
+                virusParams.pattern = 'BURST';
+            }
         }
 
         return virusParams;
     }
 
-    calculateSpreadRadius(volumeChange) {
-        // Adjust spread radius based on volume changes
-        const changeImpact = Math.min(Math.max(volumeChange, -50), 50) / 100; // Limit to ±50%
-        const radiusAdjustment = this.params.baseRadius * (1 + changeImpact);
-        
-        return Math.min(
-            Math.max(radiusAdjustment, this.params.minRadius),
-            this.params.maxRadius
-        );
-    }
-
-    calculateGrowthMultiplier(currentVolatility, volatilityChange) {
-        // Higher volatility = faster growth
-        const volatilityImpact = Math.min(Math.abs(currentVolatility) / 100, 1);
-        const changeImpact = Math.min(Math.abs(volatilityChange) / 100, 1);
-        
-        const multiplier = this.params.baseGrowthMultiplier * 
-            (1 + (volatilityImpact * 0.5) + (changeImpact * 0.5));
-        
-        return Math.min(
-            Math.max(multiplier, this.params.minGrowthMultiplier),
-            this.params.maxGrowthMultiplier
-        );
-    }
-
-    calculateIntensity(transactionCountChange) {
-        // Transaction count changes affect intensity
-        const changeImpact = Math.min(Math.max(transactionCountChange, -50), 50) / 100;
-        const intensity = this.params.baseIntensity * (1 + changeImpact);
-        
-        return Math.min(
-            Math.max(intensity, this.params.minIntensity),
-            this.params.maxIntensity
-        );
-    }
-
-    shouldSpawnNewPoints(trends) {
-        // Spawn new points when we see significant changes
-        return (
-            Math.abs(trends.volumeChange) > this.params.volumeChangeThreshold ||
-            Math.abs(trends.volatilityChange) > this.params.volatilityThreshold
-        );
-    }
-
-    getRandomSpawnPosition() {
-        // Generate random coordinates for new virus points
+    getRandomCoordinates() {
         return [
-            Math.random() * 360 - 180,  // Longitude: -180 to 180
-            Math.random() * 160 - 80    // Latitude: -80 to 80 (avoiding poles)
+            Math.random() * 180 - 90,  // Latitude: -90 to 90
+            Math.random() * 360 - 180  // Longitude: -180 to 180
         ];
     }
 } 

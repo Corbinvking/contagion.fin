@@ -1,15 +1,16 @@
-import { BitqueryService } from './BitqueryService.js';
+import { SolanaTrackerService } from './soltracker.js';
 import EventEmitter from 'events';
 
 export class MarketDataStream extends EventEmitter {
     constructor(options = {}) {
         super();
-        this.bitqueryService = new BitqueryService();
+        this.solanaTrackerService = new SolanaTrackerService('cc9bbf56-4407-4b57-a56c-0e184fa58040');
         this.interval = options.interval || 60000; // Default 1 minute
         this.windowSize = options.windowSize || 5; // Keep last 5 data points
         this.dataPoints = [];
         this.isRunning = false;
         this.lastError = null;
+        this.defaultTokenAddress = '7XJiwLDrjzxDYdZipnJXzpr1iDTmK55XixSFAa7JgNEL';
     }
 
     start() {
@@ -27,15 +28,34 @@ export class MarketDataStream extends EventEmitter {
         this.emit('stream:stop');
     }
 
+    calculateTrends() {
+        if (this.dataPoints.length < 2) return {};
+
+        const latest = this.dataPoints[this.dataPoints.length - 1];
+        const oldest = this.dataPoints[0];
+
+        // Calculate percentage changes
+        const priceChange = ((latest.marketMetrics.price - oldest.marketMetrics.price) / oldest.marketMetrics.price) * 100;
+        const volumeChange = ((latest.marketMetrics.volume - oldest.marketMetrics.volume) / oldest.marketMetrics.volume) * 100;
+        const volatilityChange = latest.marketMetrics.volatility - oldest.marketMetrics.volatility;
+
+        return {
+            priceChange: priceChange.toFixed(2),
+            volumeChange: volumeChange.toFixed(2),
+            volatilityChange: volatilityChange.toFixed(2),
+            timespan: latest.fetchTimestamp - oldest.fetchTimestamp
+        };
+    }
+
     async fetchLoop() {
         while (this.isRunning) {
             try {
                 // Fetch new data
-                const data = await this.bitqueryService.fetchTokenData();
+                const data = await this.solanaTrackerService.processTokenData(this.defaultTokenAddress);
                 
                 // Add timestamp to the data
                 const dataPoint = {
-                    ...data,
+                    marketMetrics: data,
                     fetchTimestamp: Date.now()
                 };
 
@@ -62,21 +82,6 @@ export class MarketDataStream extends EventEmitter {
             // Wait for next interval
             await new Promise(resolve => setTimeout(resolve, this.interval));
         }
-    }
-
-    calculateTrends() {
-        if (this.dataPoints.length < 2) return null;
-
-        const latest = this.dataPoints[this.dataPoints.length - 1];
-        const previous = this.dataPoints[this.dataPoints.length - 2];
-
-        return {
-            volumeChange: ((latest.totalVolume - previous.totalVolume) / previous.totalVolume) * 100,
-            transactionCountChange: ((latest.transactionCount - previous.transactionCount) / previous.transactionCount) * 100,
-            volatilityChange: ((latest.volatility - previous.volatility) / previous.volatility) * 100,
-            timeDelta: latest.fetchTimestamp - previous.fetchTimestamp,
-            windowDuration: latest.fetchTimestamp - this.dataPoints[0].fetchTimestamp
-        };
     }
 
     getStatus() {

@@ -1,5 +1,5 @@
 import { WebSocketServer } from 'ws';
-import { BitqueryService } from '../market-data/real/BitqueryService.js';
+import { SolanaTrackerService } from '../market-data/real/soltracker.js';
 import { MarketDataStream } from '../market-data/real/MarketDataStream.js';
 import { MarketToVirusTranslator } from '../market-data/real/MarketToVirusTranslator.js';
 
