@@ -58,6 +58,8 @@ interface SimulationState {
 }
 
 // Constants
+const BACKEND_WS_URL = import.meta.env.VITE_BACKEND_WS_URL;
+
 const INITIAL_VIEW_STATE: ViewState = {
     longitude: 0,
     latitude: 20,
@@ -153,7 +155,7 @@ const MapViewer: React.FC = () => {
             if (ws.current?.readyState === WebSocket.OPEN) return;
 
             try {
-                ws.current = new WebSocket('ws://localhost:8080');
+                ws.current = new WebSocket(BACKEND_WS_URL);
 
                 ws.current.onopen = () => {
                     console.log('Connected to simulation server');

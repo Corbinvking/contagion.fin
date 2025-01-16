@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import MapViewer from './MapViewer';
 
+const BACKEND_HTTP_URL = import.meta.env.VITE_BACKEND_HTTP_URL;
+
 const LiveStream = () => {
   const [status, setStatus] = useState({
     isLoading: true,
@@ -10,7 +12,7 @@ const LiveStream = () => {
 
   const checkConnection = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:8080/health');
+      const response = await fetch(`${BACKEND_HTTP_URL}/health`);
       if (response.ok) {
         const data = await response.json();
         setStatus({
