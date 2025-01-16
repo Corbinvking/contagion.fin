@@ -60,6 +60,61 @@ color: [139, 0, 0]
 }
 };
 
+##### Market Data Integration (`src/market-data/real/`)
+Real-time cryptocurrency market data integration:
+
+###### BitqueryService (`BitqueryService.js`)
+Handles GraphQL queries to Bitquery API:
+```javascript
+class BitqueryService {
+    constructor() {
+        this.endpoint = 'https://graphql.bitquery.io';
+        this.cacheTimeout = 5000; // 5 seconds cache
+    }
+    async fetchTokenData(mintAddress) {
+        // Fetches token transfers, price, and metrics
+    }
+}
+```
+
+###### Market Data Stream (`MarketDataStream.js`)
+Manages continuous market data updates:
+```javascript
+class MarketDataStream extends EventEmitter {
+    constructor(options = {}) {
+        this.interval = options.interval || 60000; // Default 1 minute
+        this.windowSize = options.windowSize || 5;  // Rolling window size
+    }
+    // Emits: 'data', 'error', 'stream:start', 'stream:stop'
+}
+```
+
+###### Market To Virus Translator (`MarketToVirusTranslator.js`)
+Converts market metrics to virus parameters:
+```javascript
+class MarketToVirusTranslator {
+    translate(marketData, trends) {
+        return {
+            spreadRadius,      // Based on volume changes
+            growthMultiplier, // Based on volatility
+            intensity,        // Based on transaction count
+            shouldSpawnNew    // Based on significant changes
+        };
+    }
+}
+```
+
+Market Data Flow:
+```
+BitqueryService → MarketDataStream → MarketToVirusTranslator → VirusSystem
+```
+
+Market to Virus Mappings:
+- Volume Changes → Spread Radius (10-200 units)
+- Volatility → Growth Multiplier (0.5-3.0x)
+- Transaction Count → Intensity (0.1-1.0)
+- Significant Changes → New Spawn Points
+
 #### 2. Controllers
 
 ##### Simulation Controller (`src/controllers/SimulationController.js`)
@@ -137,6 +192,20 @@ timestamp?: number;
 
 ## Communication Flow
 
+### Market Data Integration Flow
+```
+A[Bitquery API] -->|GraphQL| B[BitqueryService]
+B -->|Cached Data| C[MarketDataStream]
+C -->|Events| D[MarketToVirusTranslator]
+D -->|Virus Parameters| E[VirusSystem]
+```
+
+Key Events:
+- BitqueryService: Token transfers and metrics (5s cache)
+- MarketDataStream: Real-time updates (10-60s intervals)
+- MarketToVirusTranslator: Parameter conversion
+- VirusSystem: Behavior updates
+
 ### WebSocket Protocol
 
 A[Frontend Client] -->|WebSocket| B[SimulationServer]
@@ -150,6 +219,8 @@ C -->|Updates| E[RouteSystem]
 - `GET /health`: System status
 - `POST /api/simulation/control`: Control commands
 - `GET /api/simulation/state`: State retrieval
+- `GET /api/market-data/current`: Latest market data
+- `GET /api/market-data/trends`: Market trends analysis
 
 ## Development Setup
 
@@ -187,24 +258,29 @@ VITE_SUPABASE_ANON_KEY=your_supabase_key
 contagion/
 ├── backend/
 │ └── src/
-│ ├── server/
-│ │ └── SimulationServer.js
-│ ├── components/
-│ │ ├── RouteSystem.js
-│ │ └── VirusSystem.js
-│ ├── controllers/
-│ │ └── SimulationController.js
-│ └── dev-server.js
+│   ├── server/
+│   │ └── SimulationServer.js
+│   ├── components/
+│   │ ├── RouteSystem.js
+│   │ └── VirusSystem.js
+│   ├── controllers/
+│   │ └── SimulationController.js
+│   ├── market-data/
+│   │ └── real/
+│   │   ├── BitqueryService.js
+│   │   ├── MarketDataStream.js
+│   │   └── MarketToVirusTranslator.js
+│   └── dev-server.js
 └── frontend/
-└── src/
-├── main.tsx
-├── App.tsx
-├── components/
-│ ├── LiveStream.tsx
-│ ├── MapViewer.tsx
-│ └── Layout/
-├── pages/
-└── context/
+    └── src/
+        ├── main.tsx
+        ├── App.tsx
+        ├── components/
+        │ ├── LiveStream.tsx
+        │ ├── MapViewer.tsx
+        │ └── Layout/
+        ├── pages/
+        └── context/
 
 
 ## Performance Considerations
@@ -213,6 +289,8 @@ contagion/
 - WebSocket server optimized for multiple clients
 - Efficient state management
 - Binary data transmission
+- Market data caching and rolling windows
+- Optimized data translation
 
 ### Frontend
 - WebGL-based rendering with DeckGL
@@ -220,10 +298,18 @@ contagion/
 - Memoized computations
 
 ## Future Extensions
-1. Cryptocurrency Market Integration
-2. Advanced Visualization Features
-3. Enhanced Analytics
-4. Scaling Capabilities
+1. Advanced Market Data Integration
+   - Multiple token support
+   - Cross-chain analytics
+   - Custom market indicators
+2. Enhanced Virus Behavior
+   - Market-driven mutations
+   - Complex spread patterns
+   - Adaptive growth rates
+3. Analytics and Visualization
+   - Market-virus correlation analysis
+   - Predictive modeling
+   - Real-time metrics dashboard
 
 ## Deployment
 - Backend prepared for cloud deployment

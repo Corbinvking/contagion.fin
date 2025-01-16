@@ -259,6 +259,63 @@ app.get(['/', '/dev-panel', '/dev-panel.html'], (req, res) => {
                     background: #8b0000;
                     color: white;
                 }
+                .market-data-section {
+                    background: #4d0080;
+                    padding: 15px;
+                    margin-top: 15px;
+                    border-radius: 4px;
+                }
+                .market-metrics {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 10px;
+                    margin-top: 10px;
+                }
+                .metric-card {
+                    background: #2a2a2a;
+                    padding: 12px;
+                    border-radius: 8px;
+                }
+                .metric-label {
+                    color: #ccc;
+                    font-size: 0.9em;
+                }
+                .metric-value {
+                    color: #4CAF50;
+                    font-size: 1.2em;
+                    font-weight: bold;
+                    margin-top: 5px;
+                }
+                .market-impact {
+                    margin-top: 15px;
+                    padding: 10px;
+                    background: #2d0044;
+                    border-radius: 4px;
+                }
+                .impact-header {
+                    color: #ff00ff;
+                    margin-bottom: 10px;
+                }
+                .impact-item {
+                    display: flex;
+                    justify-content: space-between;
+                    margin: 5px 0;
+                    padding: 5px;
+                    background: #3d0066;
+                    border-radius: 4px;
+                }
+                .impact-label {
+                    color: #ccc;
+                }
+                .impact-value {
+                    color: #fff;
+                    font-weight: bold;
+                }
+                .market-controls {
+                    margin-top: 15px;
+                    display: flex;
+                    gap: 10px;
+                }
             </style>
         </head>
         <body>
@@ -409,6 +466,56 @@ app.get(['/', '/dev-panel', '/dev-panel.html'], (req, res) => {
                             >
                             <span class="slider-value">0.5</span>
                         </label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Market Data Integration</h3>
+                    <div class="market-data-section">
+                        <h4>Current Market Metrics</h4>
+                        <div class="market-metrics">
+                            <div class="metric-card">
+                                <div class="metric-label">Token Price</div>
+                                <div class="metric-value" id="tokenPrice">Loading...</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Market Cap</div>
+                                <div class="metric-value" id="marketCap">Loading...</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Volatility</div>
+                                <div class="metric-value" id="volatility">Loading...</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-label">Transaction Count</div>
+                                <div class="metric-value" id="transactionCount">Loading...</div>
+                            </div>
+                        </div>
+
+                        <div class="market-impact">
+                            <h4 class="impact-header">Market Impact on Virus</h4>
+                            <div class="impact-item">
+                                <span class="impact-label">Spread Radius</span>
+                                <span class="impact-value" id="marketSpreadRadius">-</span>
+                            </div>
+                            <div class="impact-item">
+                                <span class="impact-label">Growth Multiplier</span>
+                                <span class="impact-value" id="marketGrowthMultiplier">-</span>
+                            </div>
+                            <div class="impact-item">
+                                <span class="impact-label">Intensity</span>
+                                <span class="impact-value" id="marketIntensity">-</span>
+                            </div>
+                            <div class="impact-item">
+                                <span class="impact-label">Last Spawn Trigger</span>
+                                <span class="impact-value" id="lastSpawnTrigger">None</span>
+                            </div>
+                        </div>
+
+                        <div class="market-controls">
+                            <button onclick="toggleMarketDataStream()">Toggle Market Data Stream</button>
+                            <button onclick="resetMarketData()">Reset Market Data</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -610,6 +717,67 @@ app.get(['/', '/dev-panel', '/dev-panel.html'], (req, res) => {
                 style.textContent = patternStyles;
                 document.head.appendChild(style);
 
+                // Market data handling
+                let lastMarketUpdate = null;
+
+                function updateMarketMetrics(data) {
+                    const { marketData, trends, virusParams } = data;
+                    
+                    // Update market metrics
+                    document.getElementById('tokenPrice').textContent = 
+                        marketData.latestTransfer ? '$' + marketData.latestTransfer.toFixed(4) : 'N/A';
+                    document.getElementById('marketCap').textContent = 
+                        marketData.totalVolume ? '$' + marketData.totalVolume.toLocaleString() : 'N/A';
+                    document.getElementById('volatility').textContent = 
+                        marketData.volatility ? marketData.volatility.toFixed(2) + '%' : 'N/A';
+                    document.getElementById('transactionCount').textContent = 
+                        marketData.transactionCount || 'N/A';
+
+                    // Update virus impact
+                    document.getElementById('marketSpreadRadius').textContent = 
+                        virusParams.spreadRadius.toFixed(2);
+                    document.getElementById('marketGrowthMultiplier').textContent = 
+                        virusParams.growthMultiplier.toFixed(2) + 'x';
+                    document.getElementById('marketIntensity').textContent = 
+                        virusParams.intensity.toFixed(2);
+                    
+                    if (virusParams.shouldSpawnNew) {
+                        document.getElementById('lastSpawnTrigger').textContent = 
+                            new Date().toLocaleTimeString();
+                    }
+
+                    lastMarketUpdate = Date.now();
+                }
+
+                function toggleMarketDataStream() {
+                    fetch('/api/simulation/control', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            action: 'toggle_market_stream'
+                        })
+                    });
+                }
+
+                function resetMarketData() {
+                    fetch('/api/simulation/control', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            action: 'reset_market_data'
+                        })
+                    });
+                }
+
+                // Enhance the existing WebSocket connection to handle market updates
+                const ws = new WebSocket('ws://' + window.location.host);
+                ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'market_update') {
+                        updateMarketMetrics(message.data);
+                    }
+                };
+
                 // Start the status updates
                 setInterval(updateStatus, 1000);
                 updateStatus();
@@ -786,6 +954,57 @@ app.post('/api/simulation/control', (req, res) => {
                     });
                 }
                 break;
+            case 'toggle_market_stream':
+                try {
+                    if (!simulationServer.marketDataStream) {
+                        throw new Error('Market data stream not initialized');
+                    }
+
+                    if (simulationServer.marketDataStream.isRunning) {
+                        simulationServer.marketDataStream.stop();
+                        console.log('Market data stream stopped');
+                    } else {
+                        simulationServer.marketDataStream.start();
+                        console.log('Market data stream started');
+                    }
+
+                    res.json({
+                        success: true,
+                        isRunning: simulationServer.marketDataStream.isRunning
+                    });
+                } catch (error) {
+                    console.error('Failed to toggle market stream:', error);
+                    res.status(500).json({
+                        error: 'Failed to toggle market stream',
+                        details: error.message
+                    });
+                }
+                break;
+            case 'reset_market_data':
+                try {
+                    if (!simulationServer.marketDataStream) {
+                        throw new Error('Market data stream not initialized');
+                    }
+
+                    // Stop the stream
+                    simulationServer.marketDataStream.stop();
+
+                    // Clear cached data
+                    simulationServer.marketDataStream.dataPoints = [];
+                    
+                    // Restart the stream
+                    simulationServer.marketDataStream.start();
+
+                    console.log('Market data reset successful');
+                    res.json({ success: true });
+                } catch (error) {
+                    console.error('Failed to reset market data:', error);
+                    res.status(500).json({
+                        error: 'Failed to reset market data',
+                        details: error.message
+                    });
+                }
+                break;
             default:
                 return res.status(400).json({ error: 'Invalid action' });
         }
@@ -837,6 +1056,63 @@ app.use((err, req, res, next) => {
 app.use((req, res) => {
     console.log(`[404] Not Found: ${req.method} ${req.url}`);
     res.status(404).send('Not Found');
+});
+
+// Add market data endpoints
+app.get('/api/market-data/current', (req, res) => {
+    try {
+        if (!simulationServer.marketDataStream) {
+            throw new Error('Market data stream not initialized');
+        }
+
+        const currentData = simulationServer.marketDataStream.dataPoints[
+            simulationServer.marketDataStream.dataPoints.length - 1
+        ];
+
+        res.json({
+            success: true,
+            data: currentData || null,
+            isRunning: simulationServer.marketDataStream.isRunning,
+            lastError: simulationServer.marketDataStream.lastError?.message
+        });
+    } catch (error) {
+        console.error('Error fetching current market data:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/market-data/trends', (req, res) => {
+    try {
+        if (!simulationServer.marketDataStream) {
+            throw new Error('Market data stream not initialized');
+        }
+
+        // Calculate trends from the data points
+        const dataPoints = simulationServer.marketDataStream.dataPoints;
+        const trends = {
+            volumeChange: 0,
+            volatilityChange: 0,
+            transactionCountChange: 0
+        };
+
+        if (dataPoints.length >= 2) {
+            const current = dataPoints[dataPoints.length - 1];
+            const previous = dataPoints[dataPoints.length - 2];
+
+            trends.volumeChange = ((current.totalVolume - previous.totalVolume) / previous.totalVolume) * 100;
+            trends.volatilityChange = current.volatility - previous.volatility;
+            trends.transactionCountChange = ((current.transactionCount - previous.transactionCount) / previous.transactionCount) * 100;
+        }
+
+        res.json({
+            success: true,
+            trends,
+            dataPoints: dataPoints.length
+        });
+    } catch (error) {
+        console.error('Error calculating market trends:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Start server

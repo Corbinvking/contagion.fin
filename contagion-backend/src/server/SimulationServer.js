@@ -1,4 +1,7 @@
 import { WebSocketServer } from 'ws';
+import { BitqueryService } from '../market-data/real/BitqueryService.js';
+import { MarketDataStream } from '../market-data/real/MarketDataStream.js';
+import { MarketToVirusTranslator } from '../market-data/real/MarketToVirusTranslator.js';
 
 class RouteSystem {
   constructor() {
@@ -694,10 +697,25 @@ class SimulationServer {
     this.clients = new Set();
     this.debugMode = true;
 
+    // Initialize market data components
+    this.marketDataStream = new MarketDataStream({
+      interval: 10000,  // 10 seconds for development
+      windowSize: 5     // Keep last 5 data points
+    });
+
+    this.marketTranslator = new MarketToVirusTranslator({
+      debug: true,
+      volumeChangeThreshold: 5,    // 5% change
+      volatilityThreshold: 10,     // 10% change
+      baseGrowthMultiplier: 1.5,
+      maxGrowthMultiplier: 3.0
+    });
+
     // Bind methods
     this.handleConnection = this.handleConnection.bind(this);
     this.handleMessage = this.handleMessage.bind(this);
     this.broadcast = this.broadcast.bind(this);
+    this.handleMarketData = this.handleMarketData.bind(this);
   }
 
   async initialize() {
@@ -706,16 +724,23 @@ class SimulationServer {
       
       // Initialize simulation components
       this.simulation = new SimulationController();
-    await this.simulation.initialize();
+      await this.simulation.initialize();
     
       // Setup WebSocket server
-    this.wss.on('connection', this.handleConnection);
+      this.wss.on('connection', this.handleConnection);
     
+      // Start market data stream
+      this.marketDataStream.on('data', this.handleMarketData);
+      this.marketDataStream.on('error', (error) => {
+        console.error('Market data stream error:', error);
+      });
+      this.marketDataStream.start();
+
       // Start broadcasting updates
       setInterval(() => {
         if (this.simulation.isRunning) {
           const state = this.simulation.getState();
-      this.broadcast('simulation_update', state);
+          this.broadcast('simulation_update', state);
         }
       }, 16);
 
@@ -911,6 +936,42 @@ class SimulationServer {
     } catch (error) {
       console.error('Error in control handler:', error);
       throw error;
+    }
+  }
+
+  handleMarketData({ current, trends }) {
+    if (!this.simulation?.virusSystem) return;
+
+    try {
+      // Translate market data to virus parameters
+      const virusParams = this.marketTranslator.translate(current, trends);
+      
+      if (!virusParams) return;
+
+      // Update virus system parameters
+      this.simulation.virusSystem.params.spreadRadius = virusParams.spreadRadius;
+      this.simulation.virusSystem.params.growthMultiplier = virusParams.growthMultiplier;
+      this.simulation.virusSystem.params.intensity = virusParams.intensity;
+
+      // Spawn new points if indicated by market data
+      if (virusParams.shouldSpawnNew) {
+        const coordinates = [
+          Math.random() * 360 - 180,  // Longitude: -180 to 180
+          Math.random() * 180 - 90    // Latitude: -90 to 90
+        ];
+        this.simulation.virusSystem.addPoint(coordinates, 'MARKET_TRIGGERED');
+      }
+
+      // Broadcast market data update to clients
+      this.broadcast('market_update', {
+        marketData: current,
+        trends,
+        virusParams,
+        timestamp: Date.now()
+      });
+
+    } catch (error) {
+      console.error('Error handling market data:', error);
     }
   }
 }
