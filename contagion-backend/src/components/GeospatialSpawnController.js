@@ -3,14 +3,16 @@ import defaultPoints, {
     getCountryPoints, 
     getRegionsInfo 
 } from '../data/regions/index.js';
+import { KDTree } from '../utils/KDTree.js';
 
 class GeospatialSpawnController {
     constructor(predefinedPoints = defaultPoints) {
         this.points = predefinedPoints;
-        this.kdTree = null;
+        this.kdTrees = new Map();  // One KD-tree per region
         this.debugMode = true;
         this.activeRegions = new Set();
         this.loadedRegions = new Map();
+        this.populationCache = new Map();
         
         // Initialize with all available points
         this.initializePoints();
@@ -18,7 +20,6 @@ class GeospatialSpawnController {
 
     async initializePoints() {
         try {
-            // Get info about available regions
             const regions = getRegionsInfo();
             
             if (this.debugMode) {
@@ -31,16 +32,14 @@ class GeospatialSpawnController {
                 if (regionData) {
                     this.loadedRegions.set(region.key, regionData);
                     this.activeRegions.add(region.key);
+                    this.initializeKDTreeForRegion(region.key, regionData);
                 }
             });
-
-            // Initialize KD-tree with all loaded points
-            this.initializeKDTree();
 
             if (this.debugMode) {
                 console.log('GeospatialSpawnController initialized with:', {
                     regions: this.activeRegions.size,
-                    totalPoints: this.flatPoints.length
+                    totalPoints: this.getTotalPoints()
                 });
             }
         } catch (error) {
@@ -49,17 +48,30 @@ class GeospatialSpawnController {
         }
     }
 
-    // Add method to load specific regions
+    initializeKDTreeForRegion(regionKey, regionData) {
+        const points = [];
+        Object.entries(regionData).forEach(([country, states]) => {
+            Object.entries(states).forEach(([state, cities]) => {
+                cities.forEach(city => {
+                    points.push({
+                        ...city,
+                        country,
+                        state
+                    });
+                });
+            });
+        });
+        this.kdTrees.set(regionKey, new KDTree(points));
+    }
+
     loadRegion(regionKey) {
-        if (this.activeRegions.has(regionKey)) {
-            return; // Region already loaded
-        }
+        if (this.activeRegions.has(regionKey)) return;
 
         const regionData = getRegionPoints(regionKey);
         if (regionData) {
             this.loadedRegions.set(regionKey, regionData);
             this.activeRegions.add(regionKey);
-            this.initializeKDTree(); // Reinitialize with new points
+            this.initializeKDTreeForRegion(regionKey, regionData);
 
             if (this.debugMode) {
                 console.log(`Loaded region: ${regionKey}`);
@@ -67,11 +79,11 @@ class GeospatialSpawnController {
         }
     }
 
-    // Add method to unload specific regions
     unloadRegion(regionKey) {
         if (this.loadedRegions.delete(regionKey)) {
             this.activeRegions.delete(regionKey);
-            this.initializeKDTree(); // Reinitialize without unloaded points
+            this.kdTrees.delete(regionKey);
+            this.populationCache.clear();
 
             if (this.debugMode) {
                 console.log(`Unloaded region: ${regionKey}`);
@@ -79,55 +91,108 @@ class GeospatialSpawnController {
         }
     }
 
-    initializeKDTree() {
-        // Flatten points from all loaded regions
-        const flatPoints = [];
-        this.loadedRegions.forEach(regionData => {
-            Object.values(regionData).forEach(country => {
-                Object.values(country).forEach(region => {
-                    region.forEach(point => {
-                        flatPoints.push({
-                            lat: point.lat,
-                            lng: point.lng,
-                            coordinates: [point.lat, point.lng]
-                        });
-                    });
-                });
-            });
-        });
-        
-        this.flatPoints = flatPoints;
-        
-        if (this.debugMode) {
-            console.log('KD-tree initialized with points:', flatPoints.length);
-        }
-    }
-
-    findNearestPoint(currentPosition) {
-        if (!currentPosition || !Array.isArray(currentPosition) || currentPosition.length !== 2) {
+    findNearestPoint(currentPosition, options = {}) {
+        if (!this.validatePosition(currentPosition)) {
             throw new Error('Invalid position format');
         }
 
-        const [currLat, currLng] = currentPosition;
-        let nearest = null;
-        let minDistance = Infinity;
+        const { 
+            preferHighPopulation = true,
+            minPopulation = 0,
+            maxDistance = 1000 // km
+        } = options;
 
-        // Simple nearest neighbor search (will be replaced with KD-tree)
-        this.flatPoints.forEach(point => {
-            const distance = this.calculateDistance(
-                currLat,
-                currLng,
-                point.lat,
-                point.lng
-            );
-
-            if (distance < minDistance) {
-                nearest = point;
-                minDistance = distance;
+        // Find the region for the current position
+        const regionKey = this.findRegionForPosition(currentPosition);
+        if (!regionKey || !this.kdTrees.has(regionKey)) {
+            if (this.debugMode) {
+                console.warn('No valid region found for position:', currentPosition);
             }
+            return null;
+        }
+
+        // Get k nearest neighbors
+        const kdTree = this.kdTrees.get(regionKey);
+        const neighbors = kdTree.findKNearestNeighbors(currentPosition, 5);
+
+        // Filter and sort by criteria
+        const validNeighbors = neighbors
+            .filter(point => {
+                const distance = this.calculateDistance(
+                    currentPosition[0], currentPosition[1],
+                    point.lat, point.lng
+                );
+                return distance <= maxDistance && point.population >= minPopulation;
+            })
+            .sort((a, b) => {
+                if (preferHighPopulation) {
+                    return b.population - a.population;
+                }
+                return 0; // Random selection among valid points
+            });
+
+        return validNeighbors.length > 0 ? validNeighbors[0] : null;
+    }
+
+    findRegionForPosition(position) {
+        for (const [regionKey, region] of Object.entries(this.loadedRegions)) {
+            const bounds = region.bounds;
+            if (position[0] >= bounds.south && position[0] <= bounds.north &&
+                position[1] >= bounds.west && position[1] <= bounds.east) {
+                return regionKey;
+            }
+        }
+        return null;
+    }
+
+    getNextSpawnPosition(currentPosition, pattern = 'NORMAL') {
+        if (!this.validatePosition(currentPosition)) {
+            throw new Error('Invalid current position');
+        }
+
+        // Adjust search options based on pattern
+        const options = {
+            preferHighPopulation: pattern === 'BURST',
+            minPopulation: pattern === 'VECTOR' ? 500000 : 0,
+            maxDistance: pattern === 'NORMAL' ? 500 : 1000
+        };
+
+        const nearestPoint = this.findNearestPoint(currentPosition, options);
+        
+        if (!nearestPoint) {
+            if (this.debugMode) {
+                console.warn('No valid spawn points found near:', currentPosition);
+            }
+            return null;
+        }
+
+        // Cache population data for the point
+        const key = `${nearestPoint.lat},${nearestPoint.lng}`;
+        this.populationCache.set(key, {
+            population: nearestPoint.population,
+            country: nearestPoint.country,
+            state: nearestPoint.state,
+            city: nearestPoint.city
         });
 
-        return nearest ? nearest.coordinates : null;
+        return [nearestPoint.lat, nearestPoint.lng];
+    }
+
+    getPopulationData(lat, lng) {
+        const key = `${lat},${lng}`;
+        return this.populationCache.get(key);
+    }
+
+    getTotalPoints() {
+        let total = 0;
+        this.loadedRegions.forEach(region => {
+            Object.values(region).forEach(country => {
+                Object.values(country).forEach(state => {
+                    total += state.length;
+                });
+            });
+        });
+        return total;
     }
 
     calculateDistance(lat1, lng1, lat2, lng2) {
@@ -186,23 +251,6 @@ class GeospatialSpawnController {
             lng >= -180 &&
             lng <= 180
         );
-    }
-
-    getNextSpawnPosition(currentPosition, pattern = 'NORMAL') {
-        if (!this.validatePosition(currentPosition)) {
-            throw new Error('Invalid current position');
-        }
-
-        const nearestPoint = this.findNearestPoint(currentPosition);
-        
-        if (!nearestPoint) {
-            if (this.debugMode) {
-                console.warn('No valid spawn points found near:', currentPosition);
-            }
-            return null;
-        }
-
-        return nearestPoint;
     }
 
     // Add method to get active regions info

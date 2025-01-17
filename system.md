@@ -17,40 +17,127 @@ Primary WebSocket server managing:
 - Population impact tracking
 
 ##### Geospatial System (`src/components/GeospatialSpawnController.js`)
-Manages geographical spread mechanics:
-- Region-based point management
-- Nearest neighbor calculations
-- Population density tracking
-- Urban/rural spread differentiation
-
+Manages geographical spread mechanics with advanced spatial indexing:
 ```javascript
 class GeospatialSpawnController {
-    constructor(predefinedPoints) {
-        this.points = predefinedPoints;
-        this.kdTree = null;
+    constructor() {
+        this.kdTrees = new Map();  // Region-specific KD-trees
         this.activeRegions = new Set();
+        this.loadedRegions = new Map();
+        this.populationCache = new Map();
     }
-    // Methods for geographical control
 }
 ```
 
-##### Population Data Structure (`src/data/regions/`)
-Regional data organization:
-- Six major regions (North America, Europe, Asia, Africa, South America, Oceania)
-- Population statistics per region
-- Urban/rural distribution
-- Major city coordinates
+Key Features:
+- Region-based KD-tree indexing
+- Population-aware spawn mechanics
+- Dynamic region loading/unloading
+- Granular city-level data tracking
 
+Spawn Patterns:
 ```javascript
-const REGION_POPULATIONS = {
-    'asia': {
-        population: 4_700_000_000,           // ~57.3% of global
-        populationDensity: 95,               // people per km²
-        urbanPopulationPercent: 51,          // % living in urban areas
-        majorCitiesPercent: 35               // % living in major cities
+const spawnOptions = {
+    BURST: {
+        preferHighPopulation: true,
+        minPopulation: 0,
+        maxDistance: 1000
     },
-    // ... other regions
+    VECTOR: {
+        preferHighPopulation: false,
+        minPopulation: 500000,  // Major cities only
+        maxDistance: 1000
+    },
+    NORMAL: {
+        preferHighPopulation: false,
+        minPopulation: 0,
+        maxDistance: 500
+    }
 };
+```
+
+##### Spatial Indexing (`src/utils/KDTree.js`)
+Efficient spatial search implementation:
+```javascript
+class KDTree {
+    constructor(points) {
+        this.root = this.buildTree(points, 0);
+    }
+
+    // O(log n) nearest neighbor search
+    findNearestNeighbor(targetPoint) { ... }
+
+    // O(k log n) k-nearest neighbors search
+    findKNearestNeighbors(targetPoint, k) { ... }
+}
+```
+
+Performance Characteristics:
+- Construction: O(n log n)
+- Search: O(log n)
+- K-Nearest: O(k log n)
+- Memory: O(n)
+
+##### Population Data Structure (`src/data/regions/`)
+Enhanced regional data organization with population metrics:
+```javascript
+{
+    "country": {
+        "state": [
+            {
+                "lat": number,
+                "lng": number,
+                "city": string,
+                "population": number,
+                "properPopulation": number,
+                "isCapital": boolean,
+                "isMetro": boolean
+            }
+        ]
+    }
+}
+```
+
+Regional Statistics:
+```javascript
+export const regionStats = {
+    "totalPopulation": number,
+    "urbanPopulation": number,
+    "cities": number,
+    "majorCities": number,
+    "populationByCountry": {
+        [country: string]: number
+    }
+};
+```
+
+##### Population Impact Tracking
+Enhanced population metrics:
+```javascript
+class VirusSystem {
+    constructor() {
+        this.populationStats = {
+            totalInfected: 0,
+            infectedByRegion: {},
+            affectedPoints: new Set(),
+            populationDensity: new Map()
+        };
+    }
+}
+```
+
+Infection Calculations:
+```javascript
+// Calculate infected population with urban weighting
+calculateInfectedPopulation(points, region) {
+    const regionData = REGION_POPULATIONS[region];
+    const coverage = points.length / totalPoints;
+    return Math.floor(
+        regionData.population * 
+        coverage * 
+        (regionData.urbanPopulationPercent / 100)
+    );
+}
 ```
 
 ##### Virus System (`src/components/VirusSystem.js`)
