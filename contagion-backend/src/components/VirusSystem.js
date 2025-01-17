@@ -1,4 +1,5 @@
 import { ScatterplotLayer } from '@deck.gl/layers';
+import GeospatialSpawnController from './GeospatialSpawnController';
 
 const GROWTH_STATES = {
     OUTBREAK: {
@@ -62,7 +63,7 @@ class VirusPoint {
         this.spreadPattern = 'NORMAL';
     }
 
-    calculateNextPosition(pattern = 'NORMAL') {
+    calculateNextPosition(pattern = 'NORMAL', geoController = null) {
         const config = GROWTH_PATTERNS[pattern];
         const now = Date.now();
         
@@ -71,39 +72,48 @@ class VirusPoint {
         }
 
         let newPosition;
-        switch (pattern) {
-            case 'VECTOR':
-                // Directional spread with slight variation
-                newPosition = [
-                    this.position[0] + Math.cos(this.direction) * config.spreadDistance * 0.01,
-                    this.position[1] + Math.sin(this.direction) * config.spreadDistance * 0.01
-                ];
-                this.direction += (Math.random() - 0.5) * 0.3;
-                break;
-
-            case 'BURST':
-                // Explosive spread in random directions
-                const burstAngle = Math.random() * Math.PI * 2;
-                const burstDistance = (0.5 + Math.random() * 0.5) * config.spreadDistance;
-                newPosition = [
-                    this.position[0] + Math.cos(burstAngle) * burstDistance * 0.01,
-                    this.position[1] + Math.sin(burstAngle) * burstDistance * 0.01
-                ];
-                break;
-
-            case 'NORMAL':
-            default:
-                // Standard radial spread
-                const angle = Math.random() * Math.PI * 2;
-                newPosition = [
-                    this.position[0] + Math.cos(angle) * config.spreadDistance * 0.01,
-                    this.position[1] + Math.sin(angle) * config.spreadDistance * 0.01
-                ];
-                break;
+        if (geoController) {
+            // Use geospatial controller for position calculation
+            newPosition = geoController.getNextSpawnPosition(this.position, pattern);
+            if (!newPosition) {
+                // Fallback to original logic if no valid point found
+                return this._calculateFallbackPosition(pattern, config);
+            }
+        } else {
+            // Use original position calculation logic
+            newPosition = this._calculateFallbackPosition(pattern, config);
         }
 
         this.lastSpreadTime = now;
         return newPosition;
+    }
+
+    _calculateFallbackPosition(pattern, config) {
+        switch (pattern) {
+            case 'VECTOR':
+                const newPos = [
+                    this.position[0] + Math.cos(this.direction) * config.spreadDistance * 0.01,
+                    this.position[1] + Math.sin(this.direction) * config.spreadDistance * 0.01
+                ];
+                this.direction += (Math.random() - 0.5) * 0.3;
+                return newPos;
+
+            case 'BURST':
+                const burstAngle = Math.random() * Math.PI * 2;
+                const burstDistance = (0.5 + Math.random() * 0.5) * config.spreadDistance;
+                return [
+                    this.position[0] + Math.cos(burstAngle) * burstDistance * 0.01,
+                    this.position[1] + Math.sin(burstAngle) * burstDistance * 0.01
+                ];
+
+            case 'NORMAL':
+            default:
+                const angle = Math.random() * Math.PI * 2;
+                return [
+                    this.position[0] + Math.cos(angle) * config.spreadDistance * 0.01,
+                    this.position[1] + Math.sin(angle) * config.spreadDistance * 0.01
+                ];
+        }
     }
 }
 
@@ -138,6 +148,9 @@ class VirusSystem {
         this.growthInterval = 8;
         this.debugMode = true;
         this.autoCycleEnabled = true;
+
+        // Add geospatial controller
+        this.geoController = new GeospatialSpawnController();
     }
 
     updateState() {
@@ -213,7 +226,7 @@ class VirusSystem {
 
             // Generate new points based on pattern
             if (Math.random() < GROWTH_PATTERNS[this.currentPattern].spawnProbability * this.params.growthMultiplier) {
-                const newPosition = point.calculateNextPosition(this.currentPattern);
+                const newPosition = point.calculateNextPosition(this.currentPattern, this.geoController);
                 if (newPosition) {
                     const newPoint = new VirusPoint(
                         newPosition,
@@ -334,6 +347,16 @@ class VirusSystem {
     suppressSpread(factor = 0.5) {
         this.params.growthMultiplier *= factor;
         console.log('Suppressed spread:', this.params.growthMultiplier);
+    }
+
+    // Add method to update predefined points
+    updatePredefinedPoints(points) {
+        if (this.geoController) {
+            this.geoController.updatePoints(points);
+            if (this.debugMode) {
+                console.log('Updated predefined points in virus system');
+            }
+        }
     }
 }
 

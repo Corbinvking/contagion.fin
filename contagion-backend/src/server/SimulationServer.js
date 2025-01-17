@@ -716,6 +716,9 @@ class SimulationServer {
     this.handleMessage = this.handleMessage.bind(this);
     this.broadcast = this.broadcast.bind(this);
     this.handleMarketData = this.handleMarketData.bind(this);
+
+    // Add predefined points state
+    this.predefinedPoints = {};
   }
 
   async initialize() {
@@ -735,14 +738,6 @@ class SimulationServer {
         console.error('Market data stream error:', error);
       });
       this.marketDataStream.start();
-
-      // Start broadcasting updates
-      setInterval(() => {
-        if (this.simulation.isRunning) {
-          const state = this.simulation.getState();
-          this.broadcast('simulation_update', state);
-        }
-      }, 16);
 
       console.log('Simulation server initialized successfully');
     } catch (error) {
@@ -795,6 +790,13 @@ class SimulationServer {
             data: result
           }));
           break;
+        case 'update_predefined_points':
+          this.handlePredefinedPointsUpdate(data.points);
+          ws.send(JSON.stringify({
+            type: 'points_update_response',
+            data: { success: true }
+          }));
+          break;
         default:
           console.warn('Unknown message type:', type);
       }
@@ -804,6 +806,26 @@ class SimulationServer {
         type: 'error',
         data: { message: error.message }
       }));
+    }
+  }
+
+  handlePredefinedPointsUpdate(points) {
+    if (!points || typeof points !== 'object') {
+      throw new Error('Invalid points data format');
+    }
+
+    this.predefinedPoints = points;
+    
+    // Update virus system with new points
+    if (this.simulation?.virusSystem) {
+      this.simulation.virusSystem.updatePredefinedPoints(points);
+    }
+
+    if (this.debugMode) {
+      console.log('Updated predefined points:', {
+        countries: Object.keys(points).length,
+        timestamp: Date.now()
+      });
     }
   }
 
@@ -837,7 +859,7 @@ class SimulationServer {
     }
 
     console.log('Spawning virus at:', coordinates, 'with pattern:', pattern);
-    const sporeId = this.simulation.virusSystem.addPoint(coordinates, pattern);
+    const sporeId = this.simulation.virusSystem.addPoint(coordinates[1], coordinates[0], pattern);
     
     return {
       success: true,
