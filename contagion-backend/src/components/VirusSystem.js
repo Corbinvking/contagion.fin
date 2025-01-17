@@ -1,5 +1,11 @@
 import { ScatterplotLayer } from '@deck.gl/layers';
 import GeospatialSpawnController from './GeospatialSpawnController';
+import { 
+    calculateInfectedPopulation, 
+    getPopulationDensityAtPoint,
+    getPopulationAffectedByPoint,
+    getRegionStatistics
+} from '../data/regions/index.js';
 
 const GROWTH_STATES = {
     OUTBREAK: {
@@ -151,6 +157,15 @@ class VirusSystem {
 
         // Add geospatial controller
         this.geoController = new GeospatialSpawnController();
+
+        // Add population tracking
+        this.populationStats = {
+            totalInfected: 0,
+            infectedByRegion: {},
+            lastUpdate: Date.now(),
+            affectedPoints: new Set(),
+            populationDensity: new Map() // Cache population density calculations
+        };
     }
 
     updateState() {
@@ -251,6 +266,48 @@ class VirusSystem {
         if (this.debugMode && this.state.points.length % 100 === 0) {
             console.log('Points count:', this.state.points.length);
         }
+
+        // Update population statistics every second
+        if (Date.now() - this.populationStats.lastUpdate > 1000) {
+            this.updatePopulationStats();
+        }
+    }
+
+    updatePopulationStats() {
+        // Get all active points
+        const activePoints = this.state.points.filter(p => p.intensity > 0.1);
+        
+        // Calculate total infected population
+        this.populationStats.totalInfected = calculateInfectedPopulation(activePoints);
+        
+        // Calculate infected by region
+        ['north-america', 'europe', 'asia', 'africa', 'south-america', 'oceania'].forEach(region => {
+            this.populationStats.infectedByRegion[region] = calculateInfectedPopulation(activePoints, region);
+        });
+
+        // Update affected points
+        activePoints.forEach(point => {
+            this.populationStats.affectedPoints.add(`${point.position[0]},${point.position[1]}`);
+            
+            // Cache population density if not already calculated
+            const key = `${point.position[0]},${point.position[1]}`;
+            if (!this.populationStats.populationDensity.has(key)) {
+                this.populationStats.populationDensity.set(
+                    key,
+                    getPopulationDensityAtPoint(point.position[0], point.position[1])
+                );
+            }
+        });
+
+        this.populationStats.lastUpdate = Date.now();
+
+        if (this.debugMode) {
+            console.log('Population stats updated:', {
+                totalInfected: this.populationStats.totalInfected,
+                affectedPoints: this.populationStats.affectedPoints.size,
+                timestamp: this.populationStats.lastUpdate
+            });
+        }
     }
 
     addPoint(x, y, pattern = 'NORMAL') {
@@ -299,6 +356,19 @@ class VirusSystem {
                     growthMultiplier: this.params.growthMultiplier
                 });
             }
+
+            // Calculate initial population impact
+            const populationDensity = getPopulationDensityAtPoint(x, y);
+            const affectedPopulation = getPopulationAffectedByPoint({ lat: x, lng: y }, this.baseSpreadRadius);
+
+            if (this.debugMode) {
+                console.log('Adding point with population impact:', {
+                    coordinates: [x, y],
+                    populationDensity,
+                    affectedPopulation,
+                    pattern
+                });
+            }
         } catch (error) {
             console.error('Error in addPoint:', error);
             throw error;
@@ -315,28 +385,42 @@ class VirusSystem {
     }
 
     getLayers() {
-        return [new ScatterplotLayer({
-            id: 'virus-points',
-            data: this.state.points,
-            getPosition: d => d.position,
-            getRadius: d => d.radius * this.params.growthMultiplier,
-            getFillColor: d => {
-                const baseColor = GROWTH_PATTERNS[d.spreadPattern || this.currentPattern].color;
-                return [...baseColor, Math.floor(255 * d.colorIntensity * this.params.growthMultiplier)];
-            },
-            pickable: false,
-            opacity: 0.8,
-            stroked: true,
-            lineWidthMinPixels: 1,
-            filled: true,
-            radiusUnits: 'pixels',
-            radiusScale: 1,
-            radiusMinPixels: 3,
-            radiusMaxPixels: 15,
-            parameters: {
-                depthTest: false
-            }
-        })];
+        const layers = [
+            new ScatterplotLayer({
+                id: 'virus-points',
+                data: this.state.points,
+                getPosition: d => d.position,
+                getRadius: d => {
+                    // Adjust radius based on population density
+                    const density = this.populationStats.populationDensity.get(
+                        `${d.position[0]},${d.position[1]}`
+                    ) || 1;
+                    return (d.radius * this.params.growthMultiplier) * Math.log10(density + 1);
+                },
+                getFillColor: d => {
+                    const baseColor = GROWTH_PATTERNS[d.spreadPattern || this.currentPattern].color;
+                    // Adjust opacity based on population density
+                    const density = this.populationStats.populationDensity.get(
+                        `${d.position[0]},${d.position[1]}`
+                    ) || 1;
+                    return [...baseColor, Math.floor(255 * d.colorIntensity * this.params.growthMultiplier * Math.log10(density + 1))];
+                },
+                pickable: false,
+                opacity: 0.8,
+                stroked: true,
+                lineWidthMinPixels: 1,
+                filled: true,
+                radiusUnits: 'pixels',
+                radiusScale: 1,
+                radiusMinPixels: 3,
+                radiusMaxPixels: 15,
+                parameters: {
+                    depthTest: false
+                }
+            })
+        ];
+
+        return layers;
     }
 
     boostSpread(factor = 2.0) {
@@ -357,6 +441,17 @@ class VirusSystem {
                 console.log('Updated predefined points in virus system');
             }
         }
+    }
+
+    getPopulationStats() {
+        return {
+            ...this.populationStats,
+            populationDensityArray: Array.from(this.populationStats.populationDensity.entries())
+                .map(([coords, density]) => ({
+                    coordinates: coords.split(',').map(Number),
+                    density
+                }))
+        };
     }
 }
 

@@ -14,14 +14,127 @@ Primary WebSocket server managing:
 - Client connections and state broadcasting
 - Real-time message handling
 - Simulation control commands
-class SimulationServer {
-constructor(httpServer) {
-this.wss = new WebSocketServer({ server: httpServer });
-this.clients = new Set();
-this.simulation = new SimulationController();
+- Population impact tracking
+
+##### Geospatial System (`src/components/GeospatialSpawnController.js`)
+Manages geographical spread mechanics:
+- Region-based point management
+- Nearest neighbor calculations
+- Population density tracking
+- Urban/rural spread differentiation
+
+```javascript
+class GeospatialSpawnController {
+    constructor(predefinedPoints) {
+        this.points = predefinedPoints;
+        this.kdTree = null;
+        this.activeRegions = new Set();
+    }
+    // Methods for geographical control
 }
-// ... connection handling
+```
+
+##### Population Data Structure (`src/data/regions/`)
+Regional data organization:
+- Six major regions (North America, Europe, Asia, Africa, South America, Oceania)
+- Population statistics per region
+- Urban/rural distribution
+- Major city coordinates
+
+```javascript
+const REGION_POPULATIONS = {
+    'asia': {
+        population: 4_700_000_000,           // ~57.3% of global
+        populationDensity: 95,               // people per km²
+        urbanPopulationPercent: 51,          // % living in urban areas
+        majorCitiesPercent: 35               // % living in major cities
+    },
+    // ... other regions
+};
+```
+
+##### Virus System (`src/components/VirusSystem.js`)
+Controls virus behavior and population impact:
+```javascript
+const GROWTH_PATTERNS = {
+    NORMAL: {
+        tickRate: 2000,
+        spreadDistance: 0.5,
+        spawnProbability: 0.7,
+        color: [255, 0, 0]
+    },
+    VECTOR: {
+        tickRate: 1500,
+        spreadDistance: 1.5,
+        spawnProbability: 0.5,
+        color: [255, 165, 0]
+    },
+    BURST: {
+        tickRate: 1000,
+        spreadDistance: 2.5,
+        spawnProbability: 0.9,
+        color: [139, 0, 0]
+    }
+};
+
+// Population tracking
+class VirusSystem {
+    constructor() {
+        this.populationStats = {
+            totalInfected: 0,
+            infectedByRegion: {},
+            affectedPoints: new Set(),
+            populationDensity: new Map()
+        };
+    }
 }
+```
+
+#### 2. Population Impact Tracking
+
+##### Regional Statistics
+- Total population: 8.2 billion (2024 estimate)
+- Regional distribution tracking
+- Urban/rural spread differentiation
+- Population density impact
+
+##### Infection Calculations
+```javascript
+// Calculate infected population
+calculateInfectedPopulation(infectedPoints, regionKey = null)
+
+// Get population density at point
+getPopulationDensityAtPoint(lat, lng)
+
+// Get affected population
+getPopulationAffectedByPoint(point, radius)
+```
+
+##### Visualization Adjustments
+- Point size scaled by population density
+- Color intensity based on infection impact
+- Urban center highlighting
+- Regional boundary visualization
+
+#### 3. Data Organization
+
+##### Regional Data Structure
+```
+src/data/regions/
+├── index.js           # Central data management
+├── north-america.js   # North American points
+├── europe.js         # European points
+├── asia.js           # Asian points
+├── africa.js         # African points
+├── south-america.js  # South American points
+└── oceania.js        # Oceanian points
+```
+
+##### Population Metrics
+- Global population tracking
+- Regional distribution
+- Urban/rural ratios
+- Population density maps
 
 ##### Route System (`src/components/RouteSystem.js`)
 Manages transportation network:
@@ -36,29 +149,6 @@ this.lastUpdate = Date.now();
 }
 // ... route management
 }
-
-##### Virus System (`src/components/VirusSystem.js`)
-Controls virus behavior:
-const GROWTH_PATTERNS = {
-NORMAL: {
-tickRate: 2000,
-spreadDistance: 0.5,
-spawnProbability: 0.7,
-color: [255, 0, 0]
-},
-VECTOR: {
-tickRate: 1500,
-spreadDistance: 1.5,
-spawnProbability: 0.5,
-color: [255, 165, 0]
-},
-BURST: {
-tickRate: 1000,
-spreadDistance: 2.5,
-spawnProbability: 0.9,
-color: [139, 0, 0]
-}
-};
 
 ##### Market Data Integration (`src/market-data/real/`)
 Real-time cryptocurrency market data integration:
@@ -301,11 +391,15 @@ contagion/
 - Binary data transmission
 - Market data caching and rolling windows
 - Optimized data translation
+- Geospatial calculations optimization
+- Population impact caching
 
 ### Frontend
 - WebGL-based rendering with DeckGL
 - Optimized layer updates
 - Memoized computations
+- Population density visualization
+- Regional boundary rendering
 
 ## Future Extensions
 1. Advanced Market Data Integration
@@ -320,8 +414,15 @@ contagion/
    - Market-virus correlation analysis
    - Predictive modeling
    - Real-time metrics dashboard
+4. Population Impact Analysis
+   - Detailed regional spread tracking
+   - Urban/rural spread differentials
+   - Population density heat maps
+   - Real-time infection statistics
 
 ## Deployment
 - Backend prepared for cloud deployment
 - Frontend optimized for static hosting
 - Environment configuration ready
+- Regional data management system
+- Population tracking infrastructure
